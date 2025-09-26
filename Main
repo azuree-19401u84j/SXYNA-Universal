@@ -80,12 +80,12 @@ local Window = Rayfield:CreateWindow({
     },
 
     Discord = {
-        Enabled = false,
-        Invite = "noinvitelink", -- just the code, not the full link
+        Enabled = true,
+        Invite = "No Discord yet :(", -- just the code, not the full link
         RememberJoins = true,
     },
 
-    KeySystem = false,
+    KeySystem = true,
     KeySettings = {
         Title = "SXYNA Key System",
         Subtitle = "v1",
