@@ -36,41 +36,76 @@ local function getHumanoid()
     return char:FindFirstChildOfClass("Humanoid")
 end
 
--- Initialize theme from previous selection
-local THEME_SAVE_PATH = "SXYNA/theme.txt"
+-- Safe file helpers (executor-agnostic)
 local function safeIsFile(path)
-    local ok, res = pcall(function() return isfile and isfile(path) end)
+    local ok, res = pcall(function()
+        if typeof(isfile) == "function" then
+            return isfile(path)
+        end
+        return false
+    end)
     return ok and res == true
 end
+
+local function safeIsFolder(path)
+    local ok, res = pcall(function()
+        if typeof(isfolder) == "function" then
+            return isfolder(path)
+        end
+        return false
+    end)
+    return ok and res == true
+end
+
 local function safeReadFile(path)
-    local ok, res = pcall(function() return readfile and readfile(path) end)
+    local ok, res = pcall(function()
+        if typeof(readfile) == "function" then
+            return readfile(path)
+        end
+        return nil
+    end)
     if ok and type(res) == "string" and #res > 0 then return res end
     return nil
 end
-local function safeWriteFile(path, content)
+
+local function safeMakeFolder(path)
     pcall(function()
-        if writefile and makefolder then
-            if not safeIsFile("SXYNA/") then pcall(function() makefolder("SXYNA") end) end
+        if typeof(makefolder) == "function" and not safeIsFolder(path) then
+            makefolder(path)
         end
-        if writefile then writefile(path, content) end
     end)
 end
 
+local function safeWriteFile(path, content)
+    pcall(function()
+        if typeof(writefile) == "function" then
+            local folder = path:match("^(.*)/[^/]+$") or path:match("^(.*)\\[^\\]+$")
+            if folder and #folder > 0 then
+                safeMakeFolder(folder)
+            end
+            writefile(path, content)
+        end
+    end)
+end
+
+-- Initialize theme from previous selection
+local THEME_SAVE_PATH = "SXYNA/theme.txt"
 local initialTheme = _G.SXYNA_THEME or (safeIsFile(THEME_SAVE_PATH) and safeReadFile(THEME_SAVE_PATH)) or "Bloom"
 
 -- Create The Window
 local Window = Rayfield:CreateWindow({
     Name = "SXYNA Universal Panel",
-    Icon = 0, -- Lucide icon name (string) or Roblox ImageId (number). 0 = no icon
+    Icon = nil, -- No icon by default
     LoadingTitle = "SXYNA",
     LoadingSubtitle = "v1.0.1",
     ShowText = "SXYNA", -- for mobile users to unhide rayfield
     Theme = initialTheme, -- See https://docs.sirius.menu/rayfield/configuration/themes
 
-    -- Use the correct keybind property and type
+    -- Some Rayfield builds ignore this and default to RightShift; we add a fallback below.
     Keybind = Enum.KeyCode.P,
 
-    DisableRayfieldPrompts = true,
+    -- Keep prompts visible so you can see the key prompt and any errors
+    DisableRayfieldPrompts = false,
     DisableBuildWarnings = true,
 
     ConfigurationSaving = {
@@ -79,12 +114,14 @@ local Window = Rayfield:CreateWindow({
         FileName = "SXYNA",
     },
 
+    -- Keep Discord disabled until you have a valid invite code
     Discord = {
-        Enabled = true,
-        Invite = "No Discord yet :(", -- just the code, not the full link
+        Enabled = false,
+        Invite = "",
         RememberJoins = true,
     },
 
+    -- Key System enabled
     KeySystem = true,
     KeySettings = {
         Title = "SXYNA Key System",
@@ -97,10 +134,34 @@ local Window = Rayfield:CreateWindow({
     }
 })
 
--- Optional: confirm the UI loaded
+-- Optional: load configuration if your Rayfield build supports it
+pcall(function()
+    if typeof(Rayfield.LoadConfiguration) == "function" then
+        Rayfield:LoadConfiguration()
+    end
+end)
+
+-- Fallback toggle for opening/closing the menu with P, regardless of build differences
+local function toggleMenu()
+    -- Try both Rayfield and Window toggles, as builds differ
+    if typeof(Rayfield.Toggle) == "function" then
+        Rayfield:Toggle()
+    elseif typeof(Window.Toggle) == "function" then
+        Window:Toggle()
+    end
+end
+
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.P then
+        toggleMenu()
+    end
+end)
+
+-- Optional: confirm the UI loaded (you still need to enter key to unlock)
 Rayfield:Notify({
-    Title = "Welcome To The Menu.",
-    Content = "The UI Has Successfully Been Loaded. Press [P] To Open The Menu. Theme: " .. tostring(initialTheme),
+    Title = "SXYNA",
+    Content = "Press [P] or RightShift to open. Enter your key to unlock. Theme: " .. tostring(initialTheme),
     Duration = 5,
     Image = 4483362458,
 })
@@ -129,7 +190,7 @@ SettingsTab:CreateInput({
 
 -- Theme Section
 SettingsTab:CreateSection("Menu Theme")
- 
+
 -- Track the selected theme from the dropdown
 local selectedTheme = initialTheme
 
@@ -140,17 +201,20 @@ SettingsTab:CreateDropdown({
     MultipleOptions = false,
     Flag = "MenuTheme",
     Callback = function(MenuTheme)
-        selectedTheme = MenuTheme
-        _G.SXYNA_THEME = MenuTheme -- persist for this session
-        -- persist across executor restarts if supported
-        safeWriteFile(THEME_SAVE_PATH, tostring(MenuTheme))
+        -- Some builds return a string; others return a table when MultipleOptions = false
+        local theme = MenuTheme
+        if typeof(MenuTheme) == "table" then
+            theme = MenuTheme[1]
+        end
+        selectedTheme = theme
+        _G.SXYNA_THEME = theme -- persist for this session
+        safeWriteFile(THEME_SAVE_PATH, tostring(theme))
     end,
 })
 
-local Button = SettingsTab:CreateButton({
+SettingsTab:CreateButton({
     Name = "Set The Theme",
     Callback = function()
-        -- Most Rayfield versions do not hot-apply themes; inform the user.
         Rayfield:Notify({
             Title = "Theme Selected",
             Content = "Selected theme: " .. tostring(selectedTheme) .. ". If it doesn't change immediately, restart the menu.",
@@ -158,7 +222,7 @@ local Button = SettingsTab:CreateButton({
             Image = 4483362458,
         })
     end,
- })
+})
 
 -- Player Tab
 local PlayerTab = Window:CreateTab("Player", 4483362458)
@@ -195,7 +259,6 @@ PlayerTab:CreateToggle({
         speedEnabled = enabled
         if enabled then
             startSpeedLoop()
-            -- Immediately apply current slider value
             local hum = getHumanoid()
             if hum then hum.WalkSpeed = speedValue end
         else
@@ -229,14 +292,10 @@ local jumpConn = nil
 local function applyDefaultJumpOnce()
     local hum = getHumanoid()
     if hum then
-        if hum:FindFirstChild("UseJumpPower") ~= nil then
-            hum.UseJumpPower = true
-            hum.JumpPower = 50
-        elseif hum.UseJumpPower ~= nil then
+        if hum.UseJumpPower ~= nil then
             hum.UseJumpPower = true
             hum.JumpPower = 50
         else
-            -- Fallback if JumpPower is not used; approximate JumpHeight
             hum.JumpHeight = 7.2
         end
     end
@@ -245,14 +304,10 @@ end
 local function applyJump(value)
     local hum = getHumanoid()
     if hum then
-        if hum:FindFirstChild("UseJumpPower") ~= nil then
-            hum.UseJumpPower = true
-            hum.JumpPower = value
-        elseif hum.UseJumpPower ~= nil then
+        if hum.UseJumpPower ~= nil then
             hum.UseJumpPower = true
             hum.JumpPower = value
         else
-            -- If the game uses JumpHeight, map roughly from JumpPower
             hum.JumpHeight = math.clamp(value / 7, 1, 50)
         end
     end
@@ -331,7 +386,6 @@ PlayerTab:CreateToggle({
             setCharacterCollision(false)
         else
             if noclipConn then noclipConn:Disconnect() noclipConn = nil end
-            -- Re-enable collisions on disable
             setCharacterCollision(true)
         end
     end,
@@ -410,7 +464,7 @@ local function startFly()
     bg.CFrame = workspace.CurrentCamera and workspace.CurrentCamera.CFrame or hrp.CFrame
     bg.Parent = hrp
     if flyConn then flyConn:Disconnect() flyConn = nil end
-    flyConn = RunService.Heartbeat:Connect(function(dt)
+    flyConn = RunService.Heartbeat:Connect(function()
         if not flyEnabled then return end
         if not plr.Character then return end
         local cam = workspace.CurrentCamera
@@ -456,9 +510,10 @@ PlayerTab:CreateSlider({
         flySpeed = value
     end,
 })
+
+-- Player Camera
 PlayerTab:CreateSection("Player Camera")
 
--- Camera FOV controls
 local function getCamera()
     return workspace.CurrentCamera
 end
@@ -497,6 +552,7 @@ PlayerTab:CreateButton({
     end,
 })
 
+-- Teleport & Fun
 local TeleportTab = Window:CreateTab("Teleport & Fun", 4483362458)
 TeleportTab:CreateSection("Players")
 
@@ -519,7 +575,11 @@ local PlayerDropdown = TeleportTab:CreateDropdown({
     MultipleOptions = false,
     Flag = "TPPlayerSelect",
     Callback = function(name)
-        selectedPlayerName = name
+        if typeof(name) == "table" then
+            selectedPlayerName = name[1]
+        else
+            selectedPlayerName = name
+        end
     end,
 })
 
