@@ -87,13 +87,13 @@ local Window = Rayfield:CreateWindow({
 
     KeySystem = false,
     KeySettings = {
-        Title = "Untitled",
-        Subtitle = "Key System",
-        Note = "No method of obtaining the key is provided",
-        FileName = "Key",
+        Title = "SXYNA Key System",
+        Subtitle = "v1",
+        Note = "To Get The Key, Join The Discord!",
+        FileName = "SXYNAKEY",
         SaveKey = true,
         GrabKeyFromSite = false,
-        Key = {"Hello"},
+        Key = {"SXYNA-1.6.1.2.5"},
     }
 })
 
