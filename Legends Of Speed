@@ -172,39 +172,10 @@ end)
 
 
 
-Credits:Button("LeadMarker#1219 & Karma#9368", function()
-   
-    setclipboard("https://discord.gg/97anmxFpkU")
-    
+Credits:Button("Azuree", function()
+
 end) 
 
-Credits:Button("Mana#9724 & Septex#9788 (he is very hot)", function()
-    setclipboard("https://discord.gg/97anmxFpkU")
-end)
-
-Credits:Button("UI Designer: Luke Marcus#4347", function()
-    setclipboard("https://discord.gg/97anmxFpkU")
-end)
-
-Credits:Button("Project Meow Discord Server", function()
-    setclipboard("https://discord.gg/97anmxFpkU")
-        local req = (syn and syn.request) or (http and http.request) or http_request
-        if req then
-            req({
-                Url = 'http://127.0.0.1:6463/rpc?v=1',
-                Method = 'POST',
-                Headers = {
-                    ['Content-Type'] = 'application/json',
-                    Origin = 'https://discord.com'
-                },
-                Body = game:GetService('HttpService'):JSONEncode({
-                    cmd = 'INVITE_BROWSER',
-                    nonce = game:GetService('HttpService'):GenerateGUID(false),
-                    args = {code = '97anmxFpkU'}
-                })
-            })
-        end
-end)
 
 Credits:line()
 Credits:Button("Destroy Gui", function()
