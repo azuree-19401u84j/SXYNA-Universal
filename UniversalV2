@@ -1,0 +1,411 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local Lighting = game:GetService("Lighting")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- Default key to open menu
+local Keybind1 = Enum.KeyCode.P
+
+-- Create Rayfield window (disable default toggle)
+local Window = Rayfield:CreateWindow({
+   Name = "SXYNA - Universal",
+   Icon = "shield-x",
+   LoadingTitle = "SXYNA",
+   LoadingSubtitle = "v1.0.1",
+   ShowText = "SXYNA",
+   Theme = "Amethyst",
+   ToggleUIKeybind = Enum.KeyCode.P,
+   DisableRayfieldPrompts = true,
+   DisableBuildWarnings = true,
+   ConfigurationSaving = {
+      Enabled = true,
+      FolderName = "SXYNA UNIVERSAL",
+      FileName = "SXYNA"
+   },
+   Discord = {
+      Enabled = true,
+      Invite = "SXYNA",
+      RememberJoins = true
+   },
+   KeySystem = true,
+   KeySettings = {}
+})
+
+Rayfield:Notify({
+   Title = "SXYNA",
+   Content = "Key Accepted. Enjoy!",
+   Duration = 6.5,
+   Image = "code",
+})
+
+-- Listen for key press to toggle menu dynamically
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Keybind1 then
+        Window:Toggle()
+    end
+end)
+
+-- 🟢 PLAYER TAB
+local PlayerTab = Window:CreateTab("Player", 4483362458)
+PlayerTab:CreateSection("Movement")
+
+-- Speed slider
+PlayerTab:CreateSlider({
+    Name = "Player Speed",
+    Range = {0, 1000},
+    Increment = 10,
+    Suffix = "Speed",
+    CurrentValue = 16,
+    Flag = "Speed",
+    Callback = function(speed)
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = speed
+        end
+    end
+})
+
+PlayerTab:CreateButton({
+    Name = "Reset Speed",
+    Callback = function()
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = 16
+        end
+    end
+})
+
+-- Jump Power
+PlayerTab:CreateSlider({
+    Name = "Player Jump Power",
+    Range = {0, 1000},
+    Increment = 10,
+    Suffix = "Power",
+    CurrentValue = 50,
+    Flag = "JumpPower",
+    Callback = function(jumpPower)
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.UseJumpPower = true
+            LocalPlayer.Character.Humanoid.JumpPower = jumpPower
+        end
+    end
+})
+
+PlayerTab:CreateButton({
+    Name = "Reset Jump Power",
+    Callback = function()
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.UseJumpPower = true
+            LocalPlayer.Character.Humanoid.JumpPower = 50
+        end
+    end
+})
+
+-- Flight
+local flying, flyConn = false, nil
+local flySpeed = 50
+local function toggleFly(state)
+    flying = state
+    if flying then
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        local bv = Instance.new("BodyVelocity")
+        bv.MaxForce = Vector3.new(1e5,1e5,1e5)
+        bv.Parent = hrp
+        flyConn = RunService.RenderStepped:Connect(function()
+            local move = Vector3.zero
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += Camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then move -= Camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then move -= Camera.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then move += Camera.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move += Vector3.new(0,1,0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then move -= Vector3.new(0,1,0) end
+            bv.Velocity = move.Magnitude > 0 and move.Unit * flySpeed or Vector3.zero
+        end)
+    else
+        if flyConn then flyConn:Disconnect() flyConn = nil end
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            for _, v in ipairs(hrp:GetChildren()) do if v:IsA("BodyVelocity") then v:Destroy() end end
+        end
+    end
+end
+
+PlayerTab:CreateToggle({Name="Flight", CurrentValue=false, Callback=toggleFly})
+PlayerTab:CreateSlider({Name="Flight Speed", Range={0,500}, Increment=10, CurrentValue=50, Callback=function(val) flySpeed = val end})
+
+-- NoClip
+local noclip, noclipConn = false, nil
+local function toggleNoclip(state)
+    noclip = state
+    if noclip then
+        noclipConn = RunService.Stepped:Connect(function()
+            if LocalPlayer.Character then
+                for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
+                    if part:IsA("BasePart") then part.CanCollide = false end
+                end
+            end
+        end)
+    else
+        if noclipConn then noclipConn:Disconnect() end
+    end
+end
+PlayerTab:CreateToggle({Name="NoClip", CurrentValue=false, Callback=toggleNoclip})
+
+-- Infinite Jump
+local InfiniteJumpEnabled = false
+UserInputService.JumpRequest:Connect(function()
+    if InfiniteJumpEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
+    end
+end)
+PlayerTab:CreateToggle({Name="Infinite Jump", CurrentValue=false, Callback=function(state) InfiniteJumpEnabled = state end})
+
+-- Godmode
+PlayerTab:CreateButton({Name="Godmode", Callback=function()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        hum.Name="GodHumanoid"
+        local newHum = hum:Clone()
+        newHum.Parent = LocalPlayer.Character
+        task.wait()
+        hum:Destroy()
+        Camera.CameraSubject = newHum
+    end
+end})
+
+-- Sit, Anti-Ragdoll, Reset
+PlayerTab:CreateButton({Name="Sit", Callback=function() if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then LocalPlayer.Character.Humanoid.Sit = true end end})
+PlayerTab:CreateButton({Name="Anti-Ragdoll", Callback=function() if LocalPlayer.Character then for _,v in ipairs(LocalPlayer.Character:GetDescendants()) do if v:IsA("HingeConstraint") or v:IsA("BallSocketConstraint") then v:Destroy() end end end end})
+PlayerTab:CreateButton({Name="Force Reset", Callback=function() LocalPlayer:LoadCharacter() end})
+
+-- Camera
+PlayerTab:CreateSection("Camera")
+PlayerTab:CreateSlider({Name="FOV", Range={0,150}, Increment=5, CurrentValue=70, Callback=function(fov) Camera.FieldOfView=fov end})
+PlayerTab:CreateButton({Name="Reset FOV", Callback=function() Camera.FieldOfView=70 end})
+PlayerTab:CreateButton({Name="High FOV", Callback=function() Camera.FieldOfView=150 end})
+PlayerTab:CreateButton({Name="PVP FOV", Callback=function() Camera.FieldOfView=120 end})
+PlayerTab:CreateButton({Name="Zoom FOV", Callback=function() Camera.FieldOfView=40 end})
+
+-- Player Dropdown + Spectate + Teleports
+local SelectedPlayer = LocalPlayer
+local PlayerDropdown = PlayerTab:CreateDropdown({Name="Player", Options={}, CurrentOption={LocalPlayer.Name}, MultipleOptions=false, Callback=function(opt) local plr=Players:FindFirstChild(opt[1]) if plr then SelectedPlayer=plr end end})
+local function RefreshDropdown() local names={LocalPlayer.Name} for _,plr in ipairs(Players:GetPlayers()) do table.insert(names,plr.Name) end PlayerDropdown:Refresh(names,true) end
+RefreshDropdown() Players.PlayerAdded:Connect(RefreshDropdown) Players.PlayerRemoving:Connect(RefreshDropdown)
+
+PlayerTab:CreateToggle({Name="Spectate Player", CurrentValue=false, Callback=function(val)
+    if val then RunService.RenderStepped:Connect(function() if SelectedPlayer and SelectedPlayer.Character and SelectedPlayer.Character:FindFirstChild("Humanoid") then Camera.CameraSubject=SelectedPlayer.Character.Humanoid end end)
+    else Camera.CameraSubject=LocalPlayer.Character:FindFirstChild("Humanoid") end
+end})
+
+PlayerTab:CreateButton({Name="Teleport To Selected", Callback=function()
+    if SelectedPlayer.Character and SelectedPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        LocalPlayer.Character.HumanoidRootPart.CFrame = SelectedPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2,0,0)
+    end
+end})
+
+local lastTeleportedPlayer=nil
+PlayerTab:CreateButton({Name="Random Teleport", Callback=function()
+    local players={} for _,plr in ipairs(Players:GetPlayers()) do if plr~=LocalPlayer then table.insert(players,plr) end end
+    if #players==0 then return end
+    local chosen repeat chosen=players[math.random(1,#players)] until chosen~=lastTeleportedPlayer or #players==1
+    lastTeleportedPlayer=chosen
+    if chosen.Character and chosen.Character:FindFirstChild("HumanoidRootPart") then
+        LocalPlayer.Character.HumanoidRootPart.CFrame=chosen.Character.HumanoidRootPart.CFrame+Vector3.new(2,0,0)
+    end
+end})
+
+-- 🟢 VISUALS TAB
+local VisualTab = Window:CreateTab("Visuals",6034287594)
+VisualTab:CreateSection("ESP & Aimbot")
+
+local espEnabled = false
+local tracersEnabled, nameEspEnabled, distanceEspEnabled, boxEspEnabled = false, false, false, false
+local aimbotEnabled, pointAtEnabled = false, false
+local fovCircleEnabled = false
+local fovRadius = 100
+
+-- Drawing Setup (for ESP/Aimbot)
+local camera = workspace.CurrentCamera
+local drawings = {}
+
+local function clearDrawings()
+    for _,d in pairs(drawings) do d:Remove() end
+    drawings = {}
+end
+
+-- Create ESP for players
+RunService.RenderStepped:Connect(function()
+    clearDrawings()
+    if not espEnabled then return end
+
+    for _,plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = plr.Character.HumanoidRootPart
+            local pos, onScreen = camera:WorldToViewportPoint(hrp.Position)
+            if onScreen then
+                -- Tracer
+                if tracersEnabled then
+                    local line = Drawing.new("Line")
+                    line.From = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y) -- bottom middle
+                    line.To = Vector2.new(pos.X, pos.Y)
+                    line.Color = Color3.fromRGB(255,0,0)
+                    line.Thickness = 1
+                    line.Visible = true
+                    table.insert(drawings,line)
+                end
+                -- Name ESP
+                if nameEspEnabled then
+                    local text = Drawing.new("Text")
+                    text.Text = plr.Name
+                    text.Position = Vector2.new(pos.X, pos.Y-20)
+                    text.Color = Color3.fromRGB(0,255,0)
+                    text.Size = 16
+                    text.Center = true
+                    text.Visible = true
+                    table.insert(drawings,text)
+                end
+                -- Distance ESP
+                if distanceEspEnabled then
+                    local dist = (LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude
+                    local text = Drawing.new("Text")
+                    text.Text = "["..math.floor(dist).."m]"
+                    text.Position = Vector2.new(pos.X, pos.Y)
+                    text.Color = Color3.fromRGB(0,200,255)
+                    text.Size = 14
+                    text.Center = true
+                    text.Visible = true
+                    table.insert(drawings,text)
+                end
+                -- Box ESP
+                if boxEspEnabled and plr.Character:FindFirstChild("Humanoid") then
+                    local humanoid = plr.Character:FindFirstChild("Humanoid")
+                    local headPos = camera:WorldToViewportPoint(plr.Character.Head.Position + Vector3.new(0,0.5,0))
+                    local legPos = camera:WorldToViewportPoint(plr.Character.HumanoidRootPart.Position - Vector3.new(0,humanoid.HipHeight,0))
+                    local height = math.abs(headPos.Y - legPos.Y)
+                    local width = height/2
+                    local box = Drawing.new("Square")
+                    box.Size = Vector2.new(width,height)
+                    box.Position = Vector2.new(pos.X-width/2, pos.Y-height/2)
+                    box.Color = Color3.fromRGB(255,255,0)
+                    box.Thickness = 1
+                    box.Filled = false
+                    box.Visible = true
+                    table.insert(drawings,box)
+                end
+            end
+        end
+    end
+end)
+
+-- ✅ Toggles
+VisualTab:CreateToggle({Name="ESP Master Switch", CurrentValue=false, Callback=function(state) espEnabled=state if not state then clearDrawings() end end})
+VisualTab:CreateToggle({Name="Tracers", CurrentValue=false, Callback=function(state) tracersEnabled=state end})
+VisualTab:CreateToggle({Name="Name ESP", CurrentValue=false, Callback=function(state) nameEspEnabled=state end})
+VisualTab:CreateToggle({Name="Distance ESP", CurrentValue=false, Callback=function(state) distanceEspEnabled=state end})
+VisualTab:CreateToggle({Name="Box ESP", CurrentValue=false, Callback=function(state) boxEspEnabled=state end})
+
+-- ✅ Aimbot
+local function getClosestPlayer()
+    local closest, dist = nil, fovRadius
+    for _,plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            local pos, onScreen = camera:WorldToViewportPoint(plr.Character.HumanoidRootPart.Position)
+            if onScreen then
+                local mousePos = UserInputService:GetMouseLocation()
+                local mag = (Vector2.new(pos.X,pos.Y)-mousePos).Magnitude
+                if mag < dist then
+                    closest = plr
+                    dist = mag
+                end
+            end
+        end
+    end
+    return closest
+end
+
+RunService.RenderStepped:Connect(function()
+    if aimbotEnabled then
+        local target = getClosestPlayer()
+        if target and target.Character and target.Character:FindFirstChild("Head") then
+            camera.CFrame = CFrame.new(camera.CFrame.Position, target.Character.Head.Position)
+        end
+    end
+    if pointAtEnabled and SelectedPlayer and SelectedPlayer.Character and SelectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            hrp.CFrame = CFrame.new(hrp.Position, Vector3.new(SelectedPlayer.Character.HumanoidRootPart.Position.X, hrp.Position.Y, SelectedPlayer.Character.HumanoidRootPart.Position.Z))
+        end
+    end
+end)
+
+-- ✅ Aimbot Toggles
+VisualTab:CreateToggle({Name="Aimbot", CurrentValue=false, Callback=function(state) aimbotEnabled=state end})
+VisualTab:CreateToggle({Name="Point At Selected", CurrentValue=false, Callback=function(state) pointAtEnabled=state end})
+
+-- ✅ FOV Circle
+local fovCircle = Drawing.new("Circle")
+fovCircle.Color = Color3.fromRGB(255,255,255)
+fovCircle.Thickness = 1
+fovCircle.NumSides = 64
+fovCircle.Radius = fovRadius
+fovCircle.Filled = false
+fovCircle.Visible = false
+
+RunService.RenderStepped:Connect(function()
+    fovCircle.Visible = fovCircleEnabled
+    if fovCircleEnabled then
+        local mousePos = UserInputService:GetMouseLocation()
+        fovCircle.Position = mousePos
+    end
+end)
+
+VisualTab:CreateToggle({Name="Show FOV Circle", CurrentValue=false, Callback=function(state) fovCircleEnabled=state end})
+VisualTab:CreateSlider({Name="FOV Radius", Range={50,500}, Increment=10, CurrentValue=fovRadius, Callback=function(val) fovRadius=val fovCircle.Radius=val end})
+
+local VisualTab = Window:CreateTab("Visuals",6034287594)
+VisualTab:CreateSection("Visuals")
+local BrightnessBackup, AmbientBackup
+VisualTab:CreateToggle({Name="Fullbright", CurrentValue=false, Callback=function(state)
+    if state then BrightnessBackup,AmbientBackup=Lighting.Brightness,Lighting.Ambient Lighting.Brightness=2 Lighting.Ambient=Color3.new(1,1,1) else if BrightnessBackup then Lighting.Brightness=BrightnessBackup end if AmbientBackup then Lighting.Ambient=AmbientBackup end end
+end})
+VisualTab:CreateButton({Name="Night Vision", Callback=function() local cc=Instance.new("ColorCorrectionEffect",Lighting) cc.TintColor=Color3.fromRGB(0,255,0) end})
+VisualTab:CreateToggle({Name="Rainbow Character", CurrentValue=false, Callback=function(state) task.spawn(function() while state do if LocalPlayer.Character then for _,v in ipairs(LocalPlayer.Character:GetChildren()) do if v:IsA("BasePart") then v.Color=Color3.fromHSV(tick()%5/5,1,1) end end end task.wait(0.2) end end) end})
+VisualTab:CreateToggle({Name="SpinBot", CurrentValue=false, Callback=function(state) task.spawn(function() while state and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") do LocalPlayer.Character.HumanoidRootPart.CFrame*=CFrame.Angles(0,math.rad(20),0) task.wait(0.05) end end) end})
+
+-- 🟢 WORLD TAB
+local WorldTab = Window:CreateTab("World",6034509993)
+WorldTab:CreateSection("World Tools")
+WorldTab:CreateSlider({Name="Gravity", Range={0,1000}, Increment=50, CurrentValue=workspace.Gravity, Callback=function(val) workspace.Gravity=val end})
+WorldTab:CreateButton({Name="Delete All Seats", Callback=function() for _,v in ipairs(workspace:GetDescendants()) do if v:IsA("Seat") or v:IsA("VehicleSeat") then v:Destroy() end end end})
+
+local ClickTPEnabled=false
+WorldTab:CreateToggle({Name="Click TP", CurrentValue=false, Callback=function(state) ClickTPEnabled=state end})
+UserInputService.InputBegan:Connect(function(input) if ClickTPEnabled and input.UserInputType==Enum.UserInputType.MouseButton1 then local mouse=LocalPlayer:GetMouse() if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then LocalPlayer.Character.HumanoidRootPart.CFrame=CFrame.new(mouse.Hit.p+Vector3.new(0,3,0)) end end end)
+
+-- 🟢 UTILITY TAB
+local UtilityTab = Window:CreateTab("Utility",6031280882)
+UtilityTab:CreateSection("Utility")
+UtilityTab:CreateButton({Name="Rejoin", Callback=function() TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer) end})
+UtilityTab:CreateButton({Name="Server Hop", Callback=function()
+    local servers={} local req=request or syn.request
+    local body=req({Url="https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"})
+    local decoded=HttpService:JSONDecode(body.Body)
+    for _,v in pairs(decoded.data) do if v.playing<v.maxPlayers and v.id~=game.JobId then table.insert(servers,v.id) end end
+    if #servers>0 then TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1,#servers)], LocalPlayer) end
+end})
+UtilityTab:CreateButton({Name="Copy Selected Username", Callback=function() if SelectedPlayer then setclipboard(SelectedPlayer.Name) end end})
+UtilityTab:CreateButton({Name="Copy Selected UserId", Callback=function() if SelectedPlayer then setclipboard(tostring(SelectedPlayer.UserId)) end end})
+local chatSpyEnabled=false
+UtilityTab:CreateToggle({Name="Chat Spy", CurrentValue=false, Callback=function(state) chatSpyEnabled=state end})
+Players.PlayerChatted:Connect(function(plr,msg) if chatSpyEnabled then print("[CHAT SPY] "..plr.Name..": "..msg) end end)
+
+-- 🟢 SETTINGS TAB
+local SettingsTab = Window:CreateTab("Settings",4483362458)
+SettingsTab:CreateSection("Settings")
+SettingsTab:CreateButton({Name="Destroy Interface?", Callback=function() for i=5,1,-1 do Rayfield:Notify({Title="SXYNA",Content="Destroying Interface In "..i,Duration=1,Image="code"}) wait(1) end Rayfield:Notify({Title="SXYNA",Content="GoodBye!",Duration=4,Image="code"}) wait(1) Rayfield:Destroy() end})
