@@ -1,0 +1,29 @@
+repeat task.wait() until game:IsLoaded()
+
+--// some check
+if not getgenv then return print("Your executor doesn't support the `getgenv` function") end
+
+--// getgenv
+getgenv().autowins = true -- true = work | false = not work
+getgenv().loopdelay = .3 -- delay for while loop
+
+--// Services
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+--// Variables
+local GameEvent = ReplicatedStorage.Event.RemoteEvent.CToS.Game
+
+--// Functions
+local function autoFarmWins()
+    GameEvent.CStartRace:FireServer()
+    task.wait()
+    GameEvent.CGiveUpRace:FireServer()
+
+    for i = 1, 16 do
+        GameEvent.CGetRaceWins:FireServer(string.format("Wins_%d", i), 0)
+    end
+end
+
+while autowins do task.wait(loopdelay)
+    autoFarmWins()
+end
