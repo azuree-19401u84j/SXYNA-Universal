@@ -26,6 +26,7 @@ end
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
 -- Helpers
 local function getHumanoid()
@@ -34,6 +35,14 @@ local function getHumanoid()
     local char = plr.Character or plr.CharacterAdded:Wait()
     if not char then return nil end
     return char:FindFirstChildOfClass("Humanoid")
+end
+
+local function getHRP()
+    local plr = Players.LocalPlayer
+    if not plr then return nil end
+    local char = plr.Character or plr.CharacterAdded:Wait()
+    if not char then return nil end
+    return char:FindFirstChild("HumanoidRootPart")
 end
 
 -- Safe file helpers (executor-agnostic)
@@ -95,33 +104,29 @@ local initialTheme = _G.SXYNA_THEME or (safeIsFile(THEME_SAVE_PATH) and safeRead
 -- Create The Window
 local Window = Rayfield:CreateWindow({
     Name = "SXYNA Universal Panel",
-    Icon = nil, -- No icon by default
+    Icon = nil,
     LoadingTitle = "SXYNA",
     LoadingSubtitle = "v1.0.1",
-    ShowText = "SXYNA", -- for mobile users to unhide rayfield
-    Theme = initialTheme, -- See https://docs.sirius.menu/rayfield/configuration/themes
+    ShowText = "SXYNA",
+    Theme = initialTheme,
 
-    -- Some Rayfield builds ignore this and default to RightShift; we add a fallback below.
-    Keybind = Enum.KeyCode.P,
+    Keybind = Enum.KeyCode.P, -- Some builds default to RightShift; we add P fallback below.
 
-    -- Keep prompts visible so you can see the key prompt and any errors
     DisableRayfieldPrompts = false,
     DisableBuildWarnings = true,
 
     ConfigurationSaving = {
         Enabled = true,
-        FolderName = "SXYNA", -- Create a custom folder for your hub/game
+        FolderName = "SXYNA",
         FileName = "SXYNA",
     },
 
-    -- Keep Discord disabled until you have a valid invite code
     Discord = {
         Enabled = false,
         Invite = "",
         RememberJoins = true,
     },
 
-    -- Key System enabled
     KeySystem = true,
     KeySettings = {
         Title = "SXYNA Key System",
@@ -134,7 +139,6 @@ local Window = Rayfield:CreateWindow({
     }
 })
 
--- Optional: load configuration if your Rayfield build supports it
 pcall(function()
     if typeof(Rayfield.LoadConfiguration) == "function" then
         Rayfield:LoadConfiguration()
@@ -143,7 +147,6 @@ end)
 
 -- Fallback toggle for opening/closing the menu with P, regardless of build differences
 local function toggleMenu()
-    -- Try both Rayfield and Window toggles, as builds differ
     if typeof(Rayfield.Toggle) == "function" then
         Rayfield:Toggle()
     elseif typeof(Window.Toggle) == "function" then
@@ -158,7 +161,6 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     end
 end)
 
--- Optional: confirm the UI loaded (you still need to enter key to unlock)
 Rayfield:Notify({
     Title = "SXYNA",
     Content = "Press [P] or RightShift to open. Enter your key to unlock. Theme: " .. tostring(initialTheme),
@@ -167,7 +169,7 @@ Rayfield:Notify({
 })
 
 -- Create The Tab[s]
-local SettingsTab = Window:CreateTab("Settings", 4483362458) -- Title, Image
+local SettingsTab = Window:CreateTab("Settings", 4483362458)
 
 -- Key Section
 SettingsTab:CreateSection("Key")
@@ -181,7 +183,7 @@ SettingsTab:CreateInput({
     Callback = function(KeyInput)
         Rayfield:Notify({
             Title = "Toggle Key Changed.",
-            Content = "To Open, Or Close The Menu Press [" .. tostring(KeyInput) .. "]",
+            Content = "To Open/Close The Menu Press [" .. tostring(KeyInput) .. "]",
             Duration = 6.5,
             Image = 4483362458,
          })
@@ -190,8 +192,6 @@ SettingsTab:CreateInput({
 
 -- Theme Section
 SettingsTab:CreateSection("Menu Theme")
-
--- Track the selected theme from the dropdown
 local selectedTheme = initialTheme
 
 SettingsTab:CreateDropdown({
@@ -201,13 +201,12 @@ SettingsTab:CreateDropdown({
     MultipleOptions = false,
     Flag = "MenuTheme",
     Callback = function(MenuTheme)
-        -- Some builds return a string; others return a table when MultipleOptions = false
         local theme = MenuTheme
         if typeof(MenuTheme) == "table" then
             theme = MenuTheme[1]
         end
         selectedTheme = theme
-        _G.SXYNA_THEME = theme -- persist for this session
+        _G.SXYNA_THEME = theme
         safeWriteFile(THEME_SAVE_PATH, tostring(theme))
     end,
 })
@@ -286,7 +285,7 @@ PlayerTab:CreateSlider({
 
 -- Jump controls
 local jumpEnabled = false
-local jumpValue = 50 -- default Roblox JumpPower
+local jumpValue = 50
 local jumpConn = nil
 
 local function applyDefaultJumpOnce()
@@ -391,7 +390,7 @@ PlayerTab:CreateToggle({
     end,
 })
 
--- Fly (HD Admin-style basic fly)
+-- Fly (fixed: uses AssemblyLinearVelocity for reliable movement)
 local flyEnabled = false
 local flySpeed = 50
 local flyConn
@@ -438,51 +437,39 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
-local function removeBodyMovers(hrp)
-    for _, obj in ipairs(hrp:GetChildren()) do
-        if obj:IsA("BodyGyro") or obj:IsA("BodyVelocity") then
-            obj:Destroy()
-        end
-    end
-end
-
 local function startFly()
-    local plr = Players.LocalPlayer
-    if not plr or not plr.Character then return end
-    local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
     local hum = getHumanoid()
-    if not hrp or not hum then return end
+    local hrp = getHRP()
+    if not hum or not hrp then return end
+
+    -- Put character in physics mode, disable collisions for smoother flight
     hum.PlatformStand = true
-    removeBodyMovers(hrp)
-    local bv = Instance.new("BodyVelocity")
-    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    bv.Velocity = Vector3.zero
-    bv.Parent = hrp
-    local bg = Instance.new("BodyGyro")
-    bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    bg.P = 9e4
-    bg.CFrame = workspace.CurrentCamera and workspace.CurrentCamera.CFrame or hrp.CFrame
-    bg.Parent = hrp
+    hum:ChangeState(Enum.HumanoidStateType.Physics)
+    setCharacterCollision(false)
+
     if flyConn then flyConn:Disconnect() flyConn = nil end
     flyConn = RunService.Heartbeat:Connect(function()
         if not flyEnabled then return end
-        if not plr.Character then return end
-        local cam = workspace.CurrentCamera
-        if not cam then return end
-        bg.CFrame = cam.CFrame
         local dir = dirFromKeys()
-        bv.Velocity = dir * flySpeed
+        if hrp and dir then
+            -- Move reliably using AssemblyLinearVelocity
+            hrp.AssemblyLinearVelocity = dir * flySpeed
+        end
     end)
 end
 
 local function stopFly()
-    local plr = Players.LocalPlayer
-    if not plr or not plr.Character then return end
-    local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
     local hum = getHumanoid()
+    local hrp = getHRP()
     if flyConn then flyConn:Disconnect() flyConn = nil end
-    if hrp then removeBodyMovers(hrp) end
-    if hum then hum.PlatformStand = false end
+    if hrp then
+        hrp.AssemblyLinearVelocity = Vector3.zero
+    end
+    if hum then
+        hum.PlatformStand = false
+        -- Re-enable normal collisions if noclip isn't on
+        if not noclipEnabled then setCharacterCollision(true) end
+    end
 end
 
 PlayerTab:CreateToggle({
@@ -568,34 +555,61 @@ local function listOtherPlayers()
     return names
 end
 
-local PlayerDropdown = TeleportTab:CreateDropdown({
+local PlayerDropdown
+local function setSelectedNameFromCallback(val)
+    if typeof(val) == "table" then
+        selectedPlayerName = val[1]
+    else
+        selectedPlayerName = val
+    end
+end
+
+local function refreshPlayersDropdown()
+    local options = listOtherPlayers()
+    if PlayerDropdown and typeof(PlayerDropdown.Set) == "function" then
+        PlayerDropdown:Set(options)
+    end
+    -- Clear selection if it no longer exists
+    if selectedPlayerName and not Players:FindFirstChild(selectedPlayerName) then
+        selectedPlayerName = nil
+    end
+end
+
+PlayerDropdown = TeleportTab:CreateDropdown({
     Name = "Select Player",
     Options = listOtherPlayers(),
     CurrentOption = {},
     MultipleOptions = false,
     Flag = "TPPlayerSelect",
     Callback = function(name)
-        if typeof(name) == "table" then
-            selectedPlayerName = name[1]
-        else
-            selectedPlayerName = name
-        end
+        setSelectedNameFromCallback(name)
     end,
 })
 
 TeleportTab:CreateButton({
     Name = "Refresh Players",
     Callback = function()
-        PlayerDropdown:Set(listOtherPlayers())
+        refreshPlayersDropdown()
+        Rayfield:Notify({
+            Title = "Players Refreshed",
+            Content = "Updated player list.",
+            Duration = 2,
+            Image = 4483362458,
+        })
     end,
 })
+
+-- Auto-refresh when players join/leave
+Players.PlayerAdded:Connect(refreshPlayersDropdown)
+Players.PlayerRemoving:Connect(refreshPlayersDropdown)
 
 TeleportTab:CreateButton({
     Name = "Teleport To Selected",
     Callback = function()
         local me = Players.LocalPlayer
         if not me or not me.Character then return end
-        local target = selectedPlayerName and Players:FindFirstChild(selectedPlayerName)
+        if not selectedPlayerName then return end
+        local target = Players:FindFirstChild(selectedPlayerName)
         if not target or not target.Character then return end
         local myHRP = me.Character:FindFirstChild("HumanoidRootPart")
         local tHRP = target.Character:FindFirstChild("HumanoidRootPart")
@@ -624,7 +638,7 @@ TeleportTab:CreateButton({
     end,
 })
 
--- Orbit Player
+-- Orbit Player (smoother and consistent)
 TeleportTab:CreateSection("Orbit Player")
 local orbitEnabled = false
 local orbitConn
@@ -673,9 +687,18 @@ local function startOrbit()
         local myHRP = me.Character:FindFirstChild("HumanoidRootPart")
         local tHRP = target.Character:FindFirstChild("HumanoidRootPart")
         if not (myHRP and tHRP) then return end
+
+        -- Keep collisions off while orbiting for smooth motion
+        setCharacterCollision(false)
+
         angle = (angle + math.rad(orbitSpeed) * dt) % (math.pi * 2)
         local offset = Vector3.new(math.cos(angle) * orbitDistance, orbitHeight, math.sin(angle) * orbitDistance)
-        myHRP.CFrame = CFrame.new(tHRP.Position + offset, tHRP.Position)
+        local goalCFrame = CFrame.new(tHRP.Position + offset, tHRP.Position)
+
+        -- Directly set CFrame; optionally you can tween if you want smoother easing:
+        myHRP.CFrame = goalCFrame
+        -- Zero out linear velocity to avoid physics fighting the set CFrame
+        myHRP.AssemblyLinearVelocity = Vector3.zero
     end)
 end
 
@@ -689,22 +712,54 @@ TeleportTab:CreateToggle({
             startOrbit()
         else
             if orbitConn then orbitConn:Disconnect() orbitConn = nil end
+            if not noclipEnabled then setCharacterCollision(true) end
         end
     end,
 })
 
--- Fling Player (basic physics impulse approach; may not work in all games)
+-- Fling Player (spin self really fast to fling target upon collision)
+local function flingSelectedPlayer()
+    local me = Players.LocalPlayer
+    if not me or not me.Character then return end
+    if not selectedPlayerName then return end
+    local target = Players:FindFirstChild(selectedPlayerName)
+    if not target or not target.Character then return end
+
+    local myHRP = me.Character:FindFirstChild("HumanoidRootPart")
+    local tHRP = target.Character:FindFirstChild("HumanoidRootPart")
+    local hum = getHumanoid()
+    if not (myHRP and tHRP and hum) then return end
+
+    -- Ensure collisions ON for fling to transfer momentum
+    setCharacterCollision(true)
+
+    -- Move close to target
+    myHRP.CFrame = tHRP.CFrame * CFrame.new(0, 0, -2)
+
+    -- Add a temporary AngularVelocity to spin fast
+    local att = myHRP:FindFirstChildWhichIsA("Attachment") or Instance.new("Attachment", myHRP)
+    local av = Instance.new("AngularVelocity")
+    av.Attachment0 = att
+    av.MaxTorque = math.huge
+    av.AngularVelocity = Vector3.new(0, 300, 0) -- spin around Y rapidly
+    av.Parent = myHRP
+
+    -- Also add forward linear velocity burst into the target
+    myHRP.AssemblyLinearVelocity = (tHRP.Position - myHRP.Position).Unit * 200
+
+    -- Run for a short duration, then cleanup
+    task.delay(1.25, function()
+        if av then av:Destroy() end
+        -- Optionally restore noclip state
+        if noclipEnabled then
+            setCharacterCollision(false)
+        end
+    end)
+end
+
 TeleportTab:CreateButton({
     Name = "Fling Selected Player",
     Callback = function()
-        local me = Players.LocalPlayer
-        local target = selectedPlayerName and Players:FindFirstChild(selectedPlayerName)
-        if not me or not me.Character or not target or not target.Character then return end
-        local myHRP = me.Character:FindFirstChild("HumanoidRootPart")
-        local tHRP = target.Character:FindFirstChild("HumanoidRootPart")
-        if not (myHRP and tHRP) then return end
-        -- Move close and apply a burst velocity
-        myHRP.CFrame = tHRP.CFrame * CFrame.new(0, 0, -2)
-        myHRP.AssemblyLinearVelocity = (tHRP.Position - myHRP.Position).Unit * 300 + Vector3.new(0,150,0)
+        flingSelectedPlayer()
     end,
 })
